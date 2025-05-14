@@ -1,0 +1,36 @@
+Working copy changes:
+A .envrc
+A .github/settings.yml
+A .github/workflows/ci.yaml
+A .gitignore
+A CODEOWNERS
+A Cargo.lock
+A Cargo.toml
+A LICENSE-APACHE
+A LICENSE-MIT
+A README.md
+A deny.toml
+A flake-ci.toml
+A flake.lock
+A flake.nix
+A justfile
+A nix/checks/cargo-audit.nix
+A nix/checks/cargo-clippy.nix
+A nix/checks/cargo-deny.nix
+A nix/checks/cargo-diet.nix
+A nix/checks/cargo-nextest.nix
+A nix/checks/checklints.nix
+A nix/checks/treefmt.nix
+A nix/devshells/ci.nix
+A nix/devshells/default.nix
+A nix/formatter.nix
+A nix/lib/default.nix
+A nix/packages/default.nix
+A nix/packages/llvm-coverage.nix
+A nix/treefmt.nix
+A renovate.json
+A src/lib.rs
+A src/main.rs
+A tests/cli_tests.rs
+Working copy : qnxonnkx 3a7db7e5 main | (no description set)
+Parent commit: zzzzzzzz 00000000 (empty) (no description set)
