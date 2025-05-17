@@ -6,6 +6,7 @@ use winnow::Result;
 use winnow::ascii::{newline, space0, space1};
 use winnow::combinator::{alt, separated};
 use winnow::combinator::{opt, seq};
+use winnow::error::ContextError;
 use winnow::prelude::*;
 use winnow::token::{rest, take_till, take_until, take_while};
 use winnow_parse_error::ParseError;
@@ -71,6 +72,7 @@ fn file_change(s: &mut &str) -> Result<WorkingCopyChange> {
 }
 
 fn file_changes(s: &mut &str) -> Result<Vec<WorkingCopyChange>> {
+    let _ = opt("Working copy changes:\n").parse_next(s)?;
     separated(0.., file_change, "\n").parse_next(s)
 }
 
@@ -147,10 +149,17 @@ fn commit_id(s: &mut &str) -> Result<String> {
     .parse_next(s)
 }
 
+use winnow::combinator::peek;
 fn bookmark(s: &mut &str) -> Result<String> {
+    let bookmark = peek(take_until(1.., " |").map(|x: &str| x.to_string())).parse_next(s)?;
+    if bookmark.contains("\n") {
+        // Without this peek check, the bookmark would capture all the way to the next line's bookmark
+        return Err(ContextError::new());
+    }
     let bookmark = take_until(1.., " |")
         .map(|x: &str| x.to_string())
         .parse_next(s)?;
+
     let _ = " |".parse_next(s)?;
     Ok(bookmark)
 }
@@ -280,10 +289,8 @@ impl Display for Commit {
 
 fn status(s: &mut &str) -> Result<Status> {
     seq! {Status {
-        _: "Working copy changes:",
-        _: newline,
         file_changes: file_changes,
-        _: newline,
+        _: opt(newline),
         working_copy: working_copy,
         _: newline,
         parent_commit: parent_commit,
@@ -314,6 +321,8 @@ impl Display for Status {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use s_string::s;
+    use winnow::error::ContextError;
 
     const HEADER: &str = "Working copy changes:";
     const FILE1: &str = "A src/lib.rs";
@@ -353,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_parse_file_changes() {
-        let input = [FILE1, FILE2].join("\n");
+        let input = [HEADER, FILE1, FILE2].join("\n");
         let mut input = input.as_str();
 
         let expected = vec![
@@ -389,8 +398,8 @@ mod tests {
     fn test_parse_details_2() {
         let mut input = "zzzzzzzz 00000000 (empty) (no description set)";
         let expected = CommitDetails {
-            change_id: String::from("zzzzzzzz"),
-            commit_id: String::from("00000000"),
+            change_id: s!("zzzzzzzz"),
+            commit_id: s!("00000000"),
             empty: true,
             bookmark: None,
             description: None,
@@ -403,8 +412,8 @@ mod tests {
     fn test_parse_working_copy() {
         let mut input = WORKING;
         let expected = Commit::WorkingCopy(CommitDetails {
-            change_id: String::from("qnxonnkx"),
-            commit_id: String::from("60be3879"),
+            change_id: s!("qnxonnkx"),
+            commit_id: s!("60be3879"),
             empty: false,
             bookmark: Some(String::from("main")),
             description: None,
@@ -427,8 +436,8 @@ mod tests {
     fn test_parse_parent_commit() {
         let mut input = PARENT;
         let expected = Commit::ParentCommit(CommitDetails {
-            change_id: String::from("zzzzzzzz"),
-            commit_id: String::from("00000000"),
+            change_id: s!("zzzzzzzz"),
+            commit_id: s!("00000000"),
             empty: true,
             bookmark: None,
             description: None,
@@ -454,15 +463,152 @@ mod tests {
                 },
             ],
             working_copy: Commit::WorkingCopy(CommitDetails {
-                change_id: String::from("qnxonnkx"),
-                commit_id: String::from("60be3879"),
+                change_id: s!("qnxonnkx"),
+                commit_id: s!("60be3879"),
                 empty: false,
-                bookmark: Some(String::from("main")),
+                bookmark: Some(s!("main")),
                 description: None,
             }),
             parent_commit: Commit::ParentCommit(CommitDetails {
-                change_id: String::from("zzzzzzzz"),
-                commit_id: String::from("00000000"),
+                change_id: s!("zzzzzzzz"),
+                commit_id: s!("00000000"),
+                empty: true,
+                bookmark: None,
+                description: None,
+            }),
+        };
+        let actual = Status::from_str(&input);
+        assert_eq!(Ok(expected), actual);
+    }
+
+    #[test]
+    fn test_parse_working_copy_2() {
+        let mut input = "Working copy : oonwmqxn a3d80cec (no description set)";
+        let expected = Commit::WorkingCopy(CommitDetails {
+            change_id: s!("oonwmqxn"),
+            commit_id: s!("a3d80cec"),
+            empty: false,
+            bookmark: None,
+            description: None,
+        });
+        let actual = working_copy(&mut input);
+        assert_eq!(Ok(expected), actual);
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn test_parse_parent_commit_2() {
+        let mut input = "Parent commit: xtryyrqp 75d612e0 main@origin | main branch";
+        let expected = Commit::ParentCommit(CommitDetails {
+            change_id: s!("xtryyrqp"),
+            commit_id: s!("75d612e0"),
+            empty: false,
+            bookmark: Some(s!("main@origin")),
+            description: Some(s!("main branch")),
+        });
+        let actual = parent_commit(&mut input);
+        assert_eq!(Ok(expected), actual);
+        assert_eq!("", input);
+    }
+
+    #[test]
+    fn test_status_from_str_2() {
+        let mut input = r#"Working copy changes:
+M src/lib.rs
+Working copy : oonwmqxn a3d80cec (no description set)
+Parent commit: xtryyrqp 75d612e0 main@origin | main branch"#;
+
+        let _ = file_changes.parse_next(&mut input).unwrap();
+        assert_eq!(
+            r#"
+Working copy : oonwmqxn a3d80cec (no description set)
+Parent commit: xtryyrqp 75d612e0 main@origin | main branch"#,
+            input
+        );
+
+        let _ = newline::<&str, ContextError>
+            .parse_next(&mut input)
+            .unwrap();
+        assert_eq!(
+            r#"Working copy : oonwmqxn a3d80cec (no description set)
+Parent commit: xtryyrqp 75d612e0 main@origin | main branch"#,
+            input
+        );
+
+        let foo = working_copy.parse_next(&mut input).unwrap();
+        assert_eq!(
+            Commit::WorkingCopy(CommitDetails {
+                change_id: s!("oonwmqxn"),
+                commit_id: s!("a3d80cec"),
+                empty: false,
+                bookmark: None,
+                description: None
+            }),
+            foo
+        );
+        assert_eq!(
+            r#"
+Parent commit: xtryyrqp 75d612e0 main@origin | main branch"#,
+            input
+        );
+
+        let _ = newline::<&str, ContextError>
+            .parse_next(&mut input)
+            .unwrap();
+        assert_eq!(
+            "Parent commit: xtryyrqp 75d612e0 main@origin | main branch",
+            input
+        );
+
+        let _ = parent_commit.parse_next(&mut input).unwrap();
+        assert_eq!("", input);
+
+        let input = r#"Working copy changes:
+M src/lib.rs
+Working copy : oonwmqxn a3d80cec (no description set)
+Parent commit: xtryyrqp 75d612e0 main@origin | main branch"#;
+
+        // TODO: bookmark should be a struct with branch name and Option<Remote>
+
+        let expected = Status {
+            file_changes: vec![WorkingCopyChange {
+                status: FileStatus::Modified,
+                path: PathBuf::from("src/lib.rs"),
+            }],
+            working_copy: Commit::WorkingCopy(CommitDetails {
+                change_id: s!("oonwmqxn"),
+                commit_id: s!("a3d80cec"),
+                empty: false,
+                bookmark: None,
+                description: None,
+            }),
+            parent_commit: Commit::ParentCommit(CommitDetails {
+                change_id: s!("xtryyrqp"),
+                commit_id: s!("75d612e0"),
+                empty: false,
+                bookmark: Some(s!("main@origin")),
+                description: Some(s!("main branch")),
+            }),
+        };
+        let actual = Status::from_str(&input);
+        assert_eq!(Ok(expected), actual);
+    }
+
+    #[test]
+    fn test_status_no_changes() {
+        let input = [WORKING, PARENT].join("\n");
+        let expected = Status {
+            file_changes: Vec::new(),
+            working_copy: Commit::WorkingCopy(CommitDetails {
+                change_id: s!("qnxonnkx"),
+                commit_id: s!("60be3879"),
+                empty: false,
+                bookmark: Some(s!("main")),
+                description: None,
+            }),
+            parent_commit: Commit::ParentCommit(CommitDetails {
+                change_id: s!("zzzzzzzz"),
+                commit_id: s!("00000000"),
                 empty: true,
                 bookmark: None,
                 description: None,
