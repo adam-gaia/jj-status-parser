@@ -71,9 +71,18 @@ fn file_change(s: &mut &str) -> Result<WorkingCopyChange> {
     .parse_next(s)
 }
 
-fn file_changes(s: &mut &str) -> Result<Vec<WorkingCopyChange>> {
-    let _ = opt("Working copy changes:\n").parse_next(s)?;
+fn file_no_changes(s: &mut &str) -> Result<Vec<WorkingCopyChange>> {
+    let _ = "The working copy has no changes.".parse_next(s)?;
+    Ok(Vec::new())
+}
+
+fn file_yes_changes(s: &mut &str) -> Result<Vec<WorkingCopyChange>> {
+    let _ = opt("Working copy changes:\n").parse_next(s)?; // TODO: I actually don't think this should be optional
     separated(0.., file_change, "\n").parse_next(s)
+}
+
+fn file_changes(s: &mut &str) -> Result<Vec<WorkingCopyChange>> {
+    alt((file_no_changes, file_yes_changes)).parse_next(s)
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -462,6 +471,31 @@ mod tests {
                     path: PathBuf::from("src/main.rs"),
                 },
             ],
+            working_copy: Commit::WorkingCopy(CommitDetails {
+                change_id: s!("qnxonnkx"),
+                commit_id: s!("60be3879"),
+                empty: false,
+                bookmark: Some(s!("main")),
+                description: None,
+            }),
+            parent_commit: Commit::ParentCommit(CommitDetails {
+                change_id: s!("zzzzzzzz"),
+                commit_id: s!("00000000"),
+                empty: true,
+                bookmark: None,
+                description: None,
+            }),
+        };
+        let actual = Status::from_str(&input);
+        assert_eq!(Ok(expected), actual);
+    }
+
+    #[test]
+    fn test_no_changes_status_from_str() {
+        let input = ["The working copy has no changes.", WORKING, PARENT].join("\n");
+
+        let expected = Status {
+            file_changes: Vec::new(),
             working_copy: Commit::WorkingCopy(CommitDetails {
                 change_id: s!("qnxonnkx"),
                 commit_id: s!("60be3879"),
