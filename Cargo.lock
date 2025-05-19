@@ -357,6 +357,7 @@ dependencies = [
  "env_logger",
  "log",
  "pretty_assertions",
+ "s-string",
  "serde",
  "serde_json",
  "trycmd",
@@ -546,6 +547,12 @@ name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
+
+[[package]]
+name = "s-string"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd7074de4f7924d2c38d9196bf04996a73caf1d7365ee227bc459853a56c9043"
 
 [[package]]
 name = "same-file"

@@ -26,4 +26,5 @@ winnow-parse-error = "0.1.0"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
+s-string = "1.0.0"
 trycmd = "0.15.9"
